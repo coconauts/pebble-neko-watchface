@@ -1,0 +1,10 @@
+# Pebble build artifacts
+build/
+.lock-waf_*
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
