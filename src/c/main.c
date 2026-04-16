@@ -71,17 +71,23 @@ static char s_date_text[24];
 
 // Per-platform clock sizing. Big screens get the oversized ROBOTO numerics
 // (digits + colon only — time format uses %I so no space glyph is needed);
-// flint (144x168) drops to BITHAM_42_BOLD.
+// flint (144x168) drops to BITHAM_42_BOLD. Under TQV the date is hidden
+// and the neko + time are re-centred — on big screens the full-size time
+// still fits, so the "compact" slot aliases back to the main font.
 #if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
-  #define TIME_FONT_KEY FONT_KEY_ROBOTO_BOLD_SUBSET_49
-  #define DATE_FONT_KEY FONT_KEY_GOTHIC_28_BOLD
+  #define TIME_FONT_KEY         FONT_KEY_ROBOTO_BOLD_SUBSET_49
+  #define DATE_FONT_KEY         FONT_KEY_GOTHIC_28_BOLD
+  #define TIME_COMPACT_FONT_KEY TIME_FONT_KEY
   #define TIME_H 60
   #define DATE_H 32
+  #define TIME_COMPACT_H TIME_H
 #else
-  #define TIME_FONT_KEY FONT_KEY_BITHAM_42_BOLD
-  #define DATE_FONT_KEY FONT_KEY_GOTHIC_24_BOLD
+  #define TIME_FONT_KEY         FONT_KEY_BITHAM_42_BOLD
+  #define DATE_FONT_KEY         FONT_KEY_GOTHIC_24_BOLD
+  #define TIME_COMPACT_FONT_KEY FONT_KEY_GOTHIC_28_BOLD
   #define TIME_H 46
   #define DATE_H 26
+  #define TIME_COMPACT_H 32
 #endif
 
 // -------- Forward declarations --------
@@ -220,15 +226,24 @@ static void layout_ui(void) {
   Layer *date_l = text_layer_get_layer(s_date_layer);
 
   if (obstructed) {
-    // Timeline Quick View is peeking in. Hide the neko, push the
-    // clock to the top of the remaining visible area.
-    layer_set_hidden(neko_l, true);
-    int t_y = 4;
-    int d_y = t_y + TIME_H + 4;
-    layer_set_frame(time_l, GRect(0, t_y, avail.size.w, TIME_H));
-    layer_set_frame(date_l, GRect(0, d_y, avail.size.w, DATE_H));
+    // Timeline Quick View is peeking in. Keep the neko on screen, hide
+    // the date, and render the time with a compact font so the pair
+    // fits inside the unobstructed area.
+    layer_set_hidden(neko_l, false);
+    layer_set_hidden(date_l, true);
+    text_layer_set_font(s_time_layer, fonts_get_system_font(TIME_COMPACT_FONT_KEY));
+    const int gap = 2;
+    int block_h = NEKO_HEIGHT + gap + TIME_COMPACT_H;
+    int top = (avail.size.h - block_h) / 2;
+    if (top < 0) top = 0;
+    int neko_x = (full.size.w - NEKO_WIDTH) / 2;
+    int t_y = top + NEKO_HEIGHT + gap;
+    layer_set_frame(neko_l, GRect(neko_x, top, NEKO_WIDTH, NEKO_HEIGHT));
+    layer_set_frame(time_l, GRect(0, t_y, full.size.w, TIME_COMPACT_H));
   } else {
     layer_set_hidden(neko_l, false);
+    layer_set_hidden(date_l, false);
+    text_layer_set_font(s_time_layer, fonts_get_system_font(TIME_FONT_KEY));
     // Dynamic layout — works for emery (200x228 rect), gabbro
     // (260x260 round), and flint (144x168 rect): neko sits above
     // centre, clock block below. Shift scales with screen height.
