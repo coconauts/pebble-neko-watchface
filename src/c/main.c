@@ -75,6 +75,19 @@ static char s_date_text[24];
 #define MAX_ANIM_TICKS         20    // maximum length of a normal animation
 #define YAWN_PROB_DENOM        12    // 1-in-N chance to yawn after each normal anim
 
+// Per-platform clock sizing: BITHAM_42 is too tall for 144x168 screens.
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
+  #define TIME_FONT_KEY FONT_KEY_BITHAM_42_BOLD
+  #define DATE_FONT_KEY FONT_KEY_GOTHIC_24_BOLD
+  #define TIME_H 50
+  #define DATE_H 28
+#else
+  #define TIME_FONT_KEY FONT_KEY_BITHAM_30_BLACK
+  #define DATE_FONT_KEY FONT_KEY_GOTHIC_18_BOLD
+  #define TIME_H 34
+  #define DATE_H 22
+#endif
+
 // -------- Forward declarations --------
 
 static void schedule_anim_timer(void);
@@ -208,29 +221,27 @@ static void layout_ui(void) {
   Layer *time_l = text_layer_get_layer(s_time_layer);
   Layer *date_l = text_layer_get_layer(s_date_layer);
 
-  const int time_h = 50;
-  const int date_h = 28;
-
   if (obstructed) {
     // Timeline Quick View is peeking in. Hide the neko, push the
     // clock to the top of the remaining visible area.
     layer_set_hidden(neko_l, true);
-    int t_y = 6;
-    int d_y = t_y + time_h + 4;
-    layer_set_frame(time_l, GRect(0, t_y, avail.size.w, time_h));
-    layer_set_frame(date_l, GRect(0, d_y, avail.size.w, date_h));
+    int t_y = 4;
+    int d_y = t_y + TIME_H + 4;
+    layer_set_frame(time_l, GRect(0, t_y, avail.size.w, TIME_H));
+    layer_set_frame(date_l, GRect(0, d_y, avail.size.w, DATE_H));
   } else {
     layer_set_hidden(neko_l, false);
-    // Dynamic layout so both emery (200x228 rect) and gabbro (260x260
-    // round) feel balanced: neko sits above centre, clock block below.
+    // Dynamic layout — works for emery (200x228 rect), gabbro
+    // (260x260 round), and flint (144x168 rect): neko sits above
+    // centre, clock block below. Shift scales with screen height.
     int neko_x = (full.size.w - NEKO_WIDTH) / 2;
-    int neko_y = (full.size.h - NEKO_HEIGHT) / 2 - 50;
-    if (neko_y < 4) neko_y = 4;
-    int t_y = neko_y + NEKO_HEIGHT + 8;
-    int d_y = t_y + time_h + 4;
+    int neko_y = (full.size.h - NEKO_HEIGHT) / 2 - full.size.h / 5;
+    if (neko_y < 2) neko_y = 2;
+    int t_y = neko_y + NEKO_HEIGHT + 6;
+    int d_y = t_y + TIME_H + 4;
     layer_set_frame(neko_l, GRect(neko_x, neko_y, NEKO_WIDTH, NEKO_HEIGHT));
-    layer_set_frame(time_l, GRect(0, t_y, full.size.w, time_h));
-    layer_set_frame(date_l, GRect(0, d_y, full.size.w, date_h));
+    layer_set_frame(time_l, GRect(0, t_y, full.size.w, TIME_H));
+    layer_set_frame(date_l, GRect(0, d_y, full.size.w, DATE_H));
   }
 }
 
@@ -251,17 +262,17 @@ static void window_load(Window *window) {
   bitmap_layer_set_compositing_mode(s_neko_layer, GCompOpSet);
   layer_add_child(window_layer, bitmap_layer_get_layer(s_neko_layer));
 
-  s_time_layer = text_layer_create(GRect(0, 118, 200, 50));
+  s_time_layer = text_layer_create(GRect(0, 0, 10, TIME_H));
   text_layer_set_background_color(s_time_layer, GColorClear);
   text_layer_set_text_color(s_time_layer, GColorBlack);
-  text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
+  text_layer_set_font(s_time_layer, fonts_get_system_font(TIME_FONT_KEY));
   text_layer_set_text_alignment(s_time_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_time_layer));
 
-  s_date_layer = text_layer_create(GRect(0, 172, 200, 28));
+  s_date_layer = text_layer_create(GRect(0, 0, 10, DATE_H));
   text_layer_set_background_color(s_date_layer, GColorClear);
   text_layer_set_text_color(s_date_layer, GColorBlack);
-  text_layer_set_font(s_date_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  text_layer_set_font(s_date_layer, fonts_get_system_font(DATE_FONT_KEY));
   text_layer_set_text_alignment(s_date_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_date_layer));
 
