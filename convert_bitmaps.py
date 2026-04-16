@@ -12,15 +12,22 @@ from PIL import Image
 
 SRC_DIR = "/home/marbu/dev/pebble/neko-watchface/bitmaps"
 DST_DIR = "/home/marbu/dev/pebble/neko-watchface/neko-watchface/resources/images"
-SCALE = 3  # 32*3 = 96 pixels
+SCALE = 2  # 32*2 = 64 pixels
 
 os.makedirs(DST_DIR, exist_ok=True)
+
+# Only regenerate PNGs that already exist in DST_DIR — this preserves any
+# deletions the user made to cull animations they don't want on the watch.
+existing = {f for f in os.listdir(DST_DIR) if f.endswith(".png")}
 
 for fname in sorted(os.listdir(SRC_DIR)):
     if not fname.endswith(".xbm"):
         continue
+    out_name = fname.replace(".xbm", ".png")
+    if out_name not in existing:
+        continue
     src = os.path.join(SRC_DIR, fname)
-    dst = os.path.join(DST_DIR, fname.replace(".xbm", ".png"))
+    dst = os.path.join(DST_DIR, out_name)
 
     img = Image.open(src).convert("L")
     w, h = img.size

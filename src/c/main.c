@@ -61,25 +61,27 @@ static char s_date_text[24];
 // -------- Tunables --------
 
 #define ANIM_PERIOD_MS        300
-#define NEKO_WIDTH             96
-#define NEKO_HEIGHT            96
+#define NEKO_WIDTH             64
+#define NEKO_HEIGHT            64
 #define YAWN_DURATION_TICKS    10    // ~3 s of yawning before sleep
 #define WAKE_DURATION_TICKS     4    // ~1.2 s of "awake" frame after tap
 #define MIN_ANIM_TICKS          8    // minimum length of a normal animation
 #define MAX_ANIM_TICKS         20    // maximum length of a normal animation
 #define YAWN_PROB_DENOM        12    // 1-in-N chance to yawn after each normal anim
 
-// Per-platform clock sizing: BITHAM_42 is too tall for 144x168 screens.
+// Per-platform clock sizing. Big screens get the oversized ROBOTO numerics
+// (digits + colon only — time format uses %I so no space glyph is needed);
+// flint (144x168) drops to BITHAM_42_BOLD.
 #if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
+  #define TIME_FONT_KEY FONT_KEY_ROBOTO_BOLD_SUBSET_49
+  #define DATE_FONT_KEY FONT_KEY_GOTHIC_28_BOLD
+  #define TIME_H 60
+  #define DATE_H 32
+#else
   #define TIME_FONT_KEY FONT_KEY_BITHAM_42_BOLD
   #define DATE_FONT_KEY FONT_KEY_GOTHIC_24_BOLD
-  #define TIME_H 50
-  #define DATE_H 28
-#else
-  #define TIME_FONT_KEY FONT_KEY_BITHAM_30_BLACK
-  #define DATE_FONT_KEY FONT_KEY_GOTHIC_18_BOLD
-  #define TIME_H 34
-  #define DATE_H 22
+  #define TIME_H 46
+  #define DATE_H 26
 #endif
 
 // -------- Forward declarations --------
@@ -189,10 +191,12 @@ static void tap_handler(AccelAxisType axis, int32_t direction) {
 // -------- Clock --------
 
 static void update_time_text(struct tm *t) {
+  // %I (zero-padded) rather than %l, so the glyph set stays digits + ':'
+  // — the ROBOTO_BOLD_SUBSET_49 font used on big screens has no space glyph.
   if (clock_is_24h_style()) {
     strftime(s_time_text, sizeof(s_time_text), "%H:%M", t);
   } else {
-    strftime(s_time_text, sizeof(s_time_text), "%l:%M", t);
+    strftime(s_time_text, sizeof(s_time_text), "%I:%M", t);
   }
   strftime(s_date_text, sizeof(s_date_text), "%a %b %e", t);
   text_layer_set_text(s_time_layer, s_time_text);
