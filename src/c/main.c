@@ -75,9 +75,9 @@ static char s_date_text[24];
 #define IDLE_MAX_TICKS         40    // ~24 s
 // When leaving idle, YAWN_CHANCE_PCT % of the time it yawns and falls
 // asleep; otherwise it picks a short active anim.
-#define YAWN_CHANCE_PCT        25
+#define YAWN_CHANCE_PCT        10
 // Active burst length (walk/togi/kaki).
-#define ACTIVE_MIN_TICKS        8
+#define ACTIVE_MIN_TICKS       12
 #define ACTIVE_MAX_TICKS       20
 // Yawning (mati3) duration before falling asleep.
 #define YAWN_DURATION_TICKS    10    // ~3 s of yawning
