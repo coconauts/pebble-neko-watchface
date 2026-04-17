@@ -18,23 +18,22 @@ typedef struct {
 } NekoAnim;
 
 // Active animations (walk, scratch, play) — used for short bursts of
-// activity between idle rests.
+// activity between idle rests. Scratching (jare) is part of this pool.
 static const NekoAnim s_active_anims[] = {
   { { RESOURCE_ID_IMAGE_LEFT1,  RESOURCE_ID_IMAGE_LEFT2  }, 2 },
   { { RESOURCE_ID_IMAGE_RIGHT1, RESOURCE_ID_IMAGE_RIGHT2 }, 2 },
-  { { RESOURCE_ID_IMAGE_KAKI1,  RESOURCE_ID_IMAGE_KAKI2  }, 2 },
+  { { RESOURCE_ID_IMAGE_KAKI1,  RESOURCE_ID_IMAGE_KAKI2  }, 2 },  //low scratch
   { { RESOURCE_ID_IMAGE_LTOGI1, RESOURCE_ID_IMAGE_LTOGI2 }, 2 },
   { { RESOURCE_ID_IMAGE_RTOGI1, RESOURCE_ID_IMAGE_RTOGI2 }, 2 },
   { { RESOURCE_ID_IMAGE_UTOGI1, RESOURCE_ID_IMAGE_UTOGI2 }, 2 },
   { { RESOURCE_ID_IMAGE_DTOGI1, RESOURCE_ID_IMAGE_DTOGI2 }, 2 },
+  { { RESOURCE_ID_IMAGE_IDLE,   RESOURCE_ID_IMAGE_JARE2  }, 2 },  //high scratch
 };
 #define ACTIVE_ANIM_COUNT (sizeof(s_active_anims) / sizeof(s_active_anims[0]))
 
-// Special-purpose animations. idle is the resting frame and doubles
-// as frame 0 of the jare (ear-scratch) and mati (yawn) cycles.
+// Special-purpose animations.
 static const NekoAnim s_anim_idle  = { { RESOURCE_ID_IMAGE_IDLE,  RESOURCE_ID_IMAGE_IDLE  }, 1 };
-static const NekoAnim s_anim_jare  = { { RESOURCE_ID_IMAGE_IDLE,  RESOURCE_ID_IMAGE_JARE2  }, 2 };
-static const NekoAnim s_anim_mati  = { { RESOURCE_ID_IMAGE_MATI3, RESOURCE_ID_IMAGE_MATI3  }, 1 };
+static const NekoAnim s_anim_mati  = { { RESOURCE_ID_IMAGE_MATI3, RESOURCE_ID_IMAGE_MATI3 }, 1 }; //yawn
 static const NekoAnim s_anim_sleep = { { RESOURCE_ID_IMAGE_SLEEP1, RESOURCE_ID_IMAGE_SLEEP2 }, 2 };
 static const NekoAnim s_anim_awake = { { RESOURCE_ID_IMAGE_AWAKE,  RESOURCE_ID_IMAGE_AWAKE  }, 1 };
 
@@ -42,8 +41,7 @@ static const NekoAnim s_anim_awake = { { RESOURCE_ID_IMAGE_AWAKE,  RESOURCE_ID_I
 
 typedef enum {
   STATE_IDLE,         // resting in idle pose (the default)
-  STATE_ACTIVE,       // brief walk/scratch/play animation
-  STATE_SCRATCHING,   // jare2 ↔ idle (ear-scratch), leads to yawn
+  STATE_ACTIVE,       // brief walk/scratch/play animation (incl. jare)
   STATE_YAWNING,      // mati3 (yawn), leads to sleep
   STATE_SLEEPING,     // sleep1 ↔ sleep2, until tap
   STATE_WAKING,       // awake frame, back to idle
@@ -72,16 +70,15 @@ static char s_date_text[24];
 #define NEKO_HEIGHT            64
 
 // Idle: the cat rests in idle pose for a long stretch.
-#define IDLE_MIN_TICKS         40    // ~12 s
-#define IDLE_MAX_TICKS         80    // ~24 s
-// When leaving idle, SCRATCH_CHANCE_PCT % of the time it starts the
-// scratch→yawn→sleep sequence; otherwise it picks a short active anim.
-#define SCRATCH_CHANCE_PCT     25
+#define IDLE_MIN_TICKS         20    // ~12 s
+#define IDLE_MAX_TICKS         40    // ~24 s
+// When leaving idle, YAWN_CHANCE_PCT % of the time it yawns and falls
+// asleep; otherwise it picks a short active anim.
+#define YAWN_CHANCE_PCT        25
 // Active burst length (walk/togi/kaki).
 #define ACTIVE_MIN_TICKS        8
 #define ACTIVE_MAX_TICKS       20
-// Scratching (jare) and yawning (mati) durations in the sleep sequence.
-#define SCRATCH_DURATION_TICKS 12    // ~3.6 s of ear scratching
+// Yawning (mati3) duration before falling asleep.
 #define YAWN_DURATION_TICKS    10    // ~3 s of yawning
 // Awake pose after tap.
 #define WAKE_DURATION_TICKS     4    // ~1.2 s
@@ -160,10 +157,10 @@ static void anim_timer_cb(void *data) {
   switch (s_state) {
     case STATE_IDLE:
       // Resting in idle pose. After a long pause, either do a short active
-      // burst or begin the scratch→yawn→sleep sequence.
+      // burst or yawn and fall asleep.
       if (s_ticks_in_anim >= s_anim_duration_ticks) {
-        if ((int)(rand() % 100) < SCRATCH_CHANCE_PCT) {
-          enter_state(STATE_SCRATCHING, &s_anim_jare);
+        if ((int)(rand() % 100) < YAWN_CHANCE_PCT) {
+          enter_state(STATE_YAWNING, &s_anim_mati);
         } else {
           start_active();
         }
@@ -173,12 +170,6 @@ static void anim_timer_cb(void *data) {
       // Short walk/scratch/play, then back to idle.
       if (s_ticks_in_anim >= s_anim_duration_ticks) {
         start_idle();
-      }
-      break;
-    case STATE_SCRATCHING:
-      // Ear-scratch (jare2 ↔ idle), then yawn.
-      if (s_ticks_in_anim >= SCRATCH_DURATION_TICKS) {
-        enter_state(STATE_YAWNING, &s_anim_mati);
       }
       break;
     case STATE_YAWNING:
@@ -209,8 +200,7 @@ static void schedule_anim_timer(void) {
 // -------- Tap (wake from sleep) --------
 
 static void tap_handler(AccelAxisType axis, int32_t direction) {
-  if (s_state == STATE_SLEEPING || s_state == STATE_YAWNING
-      || s_state == STATE_SCRATCHING) {
+  if (s_state == STATE_SLEEPING || s_state == STATE_YAWNING) {
     enter_state(STATE_WAKING, &s_anim_awake);
     update_bitmap();
   }
