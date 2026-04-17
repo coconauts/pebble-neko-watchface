@@ -65,7 +65,8 @@ static char s_date_text[24];
 
 // -------- Tunables --------
 
-#define ANIM_PERIOD_MS        300
+#define ANIM_PERIOD_MS        150   // frame period for active animations
+#define SLEEP_PERIOD_MS       800   // slower cycle for zzz
 #define NEKO_WIDTH             64
 #define NEKO_HEIGHT            64
 
@@ -194,7 +195,8 @@ static void anim_timer_cb(void *data) {
 
 static void schedule_anim_timer(void) {
   if (s_anim_timer) return;
-  s_anim_timer = app_timer_register(ANIM_PERIOD_MS, anim_timer_cb, NULL);
+  int period = (s_state == STATE_SLEEPING) ? SLEEP_PERIOD_MS : ANIM_PERIOD_MS;
+  s_anim_timer = app_timer_register(period, anim_timer_cb, NULL);
 }
 
 // -------- Tap (wake from sleep) --------
