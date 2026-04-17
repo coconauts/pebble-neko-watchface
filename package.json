@@ -25,7 +25,7 @@
         { "type": "png", "name": "IMAGE_LEFT2",  "file": "images/left2.png" },
         { "type": "png", "name": "IMAGE_LTOGI1", "file": "images/ltogi1.png" },
         { "type": "png", "name": "IMAGE_LTOGI2", "file": "images/ltogi2.png" },
-        { "type": "png", "name": "IMAGE_MATI2",  "file": "images/mati2.png" },
+        { "type": "png", "name": "IMAGE_IDLE",   "file": "images/idle.png" },
         { "type": "png", "name": "IMAGE_MATI3",  "file": "images/mati3.png" },
         { "type": "png", "name": "IMAGE_RIGHT1", "file": "images/right1.png" },
         { "type": "png", "name": "IMAGE_RIGHT2", "file": "images/right2.png" },

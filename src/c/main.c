@@ -17,8 +17,9 @@ typedef struct {
   uint8_t  frame_count;
 } NekoAnim;
 
-static const NekoAnim s_normal_anims[] = {
-  { { RESOURCE_ID_IMAGE_JARE2,  RESOURCE_ID_IMAGE_JARE2  }, 1 },
+// Active animations (walk, scratch, play) — used for short bursts of
+// activity between idle rests.
+static const NekoAnim s_active_anims[] = {
   { { RESOURCE_ID_IMAGE_LEFT1,  RESOURCE_ID_IMAGE_LEFT2  }, 2 },
   { { RESOURCE_ID_IMAGE_RIGHT1, RESOURCE_ID_IMAGE_RIGHT2 }, 2 },
   { { RESOURCE_ID_IMAGE_KAKI1,  RESOURCE_ID_IMAGE_KAKI2  }, 2 },
@@ -27,19 +28,25 @@ static const NekoAnim s_normal_anims[] = {
   { { RESOURCE_ID_IMAGE_UTOGI1, RESOURCE_ID_IMAGE_UTOGI2 }, 2 },
   { { RESOURCE_ID_IMAGE_DTOGI1, RESOURCE_ID_IMAGE_DTOGI2 }, 2 },
 };
-#define NORMAL_ANIM_COUNT (sizeof(s_normal_anims) / sizeof(s_normal_anims[0]))
+#define ACTIVE_ANIM_COUNT (sizeof(s_active_anims) / sizeof(s_active_anims[0]))
 
-static const NekoAnim s_anim_mati  = { { RESOURCE_ID_IMAGE_MATI2,  RESOURCE_ID_IMAGE_MATI3  }, 2 };
+// Special-purpose animations. idle is the resting frame and doubles
+// as frame 0 of the jare (ear-scratch) and mati (yawn) cycles.
+static const NekoAnim s_anim_idle  = { { RESOURCE_ID_IMAGE_IDLE,  RESOURCE_ID_IMAGE_IDLE  }, 1 };
+static const NekoAnim s_anim_jare  = { { RESOURCE_ID_IMAGE_IDLE,  RESOURCE_ID_IMAGE_JARE2  }, 2 };
+static const NekoAnim s_anim_mati  = { { RESOURCE_ID_IMAGE_MATI3, RESOURCE_ID_IMAGE_MATI3  }, 1 };
 static const NekoAnim s_anim_sleep = { { RESOURCE_ID_IMAGE_SLEEP1, RESOURCE_ID_IMAGE_SLEEP2 }, 2 };
 static const NekoAnim s_anim_awake = { { RESOURCE_ID_IMAGE_AWAKE,  RESOURCE_ID_IMAGE_AWAKE  }, 1 };
 
 // -------- State --------
 
 typedef enum {
-  STATE_NORMAL,
-  STATE_YAWNING,
-  STATE_SLEEPING,
-  STATE_WAKING,
+  STATE_IDLE,         // resting in idle pose (the default)
+  STATE_ACTIVE,       // brief walk/scratch/play animation
+  STATE_SCRATCHING,   // jare2 ↔ idle (ear-scratch), leads to yawn
+  STATE_YAWNING,      // mati3 (yawn), leads to sleep
+  STATE_SLEEPING,     // sleep1 ↔ sleep2, until tap
+  STATE_WAKING,       // awake frame, back to idle
 } NekoState;
 
 static Window       *s_window;
@@ -49,8 +56,8 @@ static TextLayer    *s_time_layer;
 static TextLayer    *s_date_layer;
 static AppTimer     *s_anim_timer = NULL;
 
-static NekoState       s_state = STATE_NORMAL;
-static const NekoAnim *s_current_anim = &s_normal_anims[0];
+static NekoState       s_state = STATE_IDLE;
+static const NekoAnim *s_current_anim = &s_anim_idle;
 static uint8_t         s_frame_idx = 0;
 static uint16_t        s_ticks_in_anim = 0;
 static uint16_t        s_anim_duration_ticks = 12;
@@ -63,11 +70,21 @@ static char s_date_text[24];
 #define ANIM_PERIOD_MS        300
 #define NEKO_WIDTH             64
 #define NEKO_HEIGHT            64
-#define YAWN_DURATION_TICKS    10    // ~3 s of yawning before sleep
-#define WAKE_DURATION_TICKS     4    // ~1.2 s of "awake" frame after tap
-#define MIN_ANIM_TICKS          8    // minimum length of a normal animation
-#define MAX_ANIM_TICKS         20    // maximum length of a normal animation
-#define YAWN_PROB_DENOM        12    // 1-in-N chance to yawn after each normal anim
+
+// Idle: the cat rests in idle pose for a long stretch.
+#define IDLE_MIN_TICKS         40    // ~12 s
+#define IDLE_MAX_TICKS         80    // ~24 s
+// When leaving idle, SCRATCH_CHANCE_PCT % of the time it starts the
+// scratch→yawn→sleep sequence; otherwise it picks a short active anim.
+#define SCRATCH_CHANCE_PCT     25
+// Active burst length (walk/togi/kaki).
+#define ACTIVE_MIN_TICKS        8
+#define ACTIVE_MAX_TICKS       20
+// Scratching (jare) and yawning (mati) durations in the sleep sequence.
+#define SCRATCH_DURATION_TICKS 12    // ~3.6 s of ear scratching
+#define YAWN_DURATION_TICKS    10    // ~3 s of yawning
+// Awake pose after tap.
+#define WAKE_DURATION_TICKS     4    // ~1.2 s
 
 // Per-platform clock sizing. Big screens get the oversized ROBOTO numerics
 // (digits + colon only — time format uses %I so no space glyph is needed);
@@ -115,33 +132,22 @@ static void update_bitmap(void) {
   swap_bitmap(s_current_anim->frames[idx]);
 }
 
-static void start_normal(void) {
-  s_state = STATE_NORMAL;
-  s_current_anim = &s_normal_anims[rand() % NORMAL_ANIM_COUNT];
+static void enter_state(NekoState state, const NekoAnim *anim) {
+  s_state = state;
+  s_current_anim = anim;
   s_frame_idx = 0;
   s_ticks_in_anim = 0;
-  s_anim_duration_ticks = rand_range(MIN_ANIM_TICKS, MAX_ANIM_TICKS);
+  s_anim_duration_ticks = 0;
 }
 
-static void start_yawn(void) {
-  s_state = STATE_YAWNING;
-  s_current_anim = &s_anim_mati;
-  s_frame_idx = 0;
-  s_ticks_in_anim = 0;
+static void start_idle(void) {
+  enter_state(STATE_IDLE, &s_anim_idle);
+  s_anim_duration_ticks = rand_range(IDLE_MIN_TICKS, IDLE_MAX_TICKS);
 }
 
-static void start_sleep(void) {
-  s_state = STATE_SLEEPING;
-  s_current_anim = &s_anim_sleep;
-  s_frame_idx = 0;
-  s_ticks_in_anim = 0;
-}
-
-static void start_wake(void) {
-  s_state = STATE_WAKING;
-  s_current_anim = &s_anim_awake;
-  s_frame_idx = 0;
-  s_ticks_in_anim = 0;
+static void start_active(void) {
+  enter_state(STATE_ACTIVE, &s_active_anims[rand() % ACTIVE_ANIM_COUNT]);
+  s_anim_duration_ticks = rand_range(ACTIVE_MIN_TICKS, ACTIVE_MAX_TICKS);
 }
 
 // -------- Animation tick --------
@@ -152,18 +158,33 @@ static void anim_timer_cb(void *data) {
   s_frame_idx++;
 
   switch (s_state) {
-    case STATE_NORMAL:
+    case STATE_IDLE:
+      // Resting in idle pose. After a long pause, either do a short active
+      // burst or begin the scratch→yawn→sleep sequence.
       if (s_ticks_in_anim >= s_anim_duration_ticks) {
-        if ((rand() % YAWN_PROB_DENOM) == 0) {
-          start_yawn();
+        if ((int)(rand() % 100) < SCRATCH_CHANCE_PCT) {
+          enter_state(STATE_SCRATCHING, &s_anim_jare);
         } else {
-          start_normal();
+          start_active();
         }
       }
       break;
+    case STATE_ACTIVE:
+      // Short walk/scratch/play, then back to idle.
+      if (s_ticks_in_anim >= s_anim_duration_ticks) {
+        start_idle();
+      }
+      break;
+    case STATE_SCRATCHING:
+      // Ear-scratch (jare2 ↔ idle), then yawn.
+      if (s_ticks_in_anim >= SCRATCH_DURATION_TICKS) {
+        enter_state(STATE_YAWNING, &s_anim_mati);
+      }
+      break;
     case STATE_YAWNING:
+      // Yawn (mati3), then fall asleep.
       if (s_ticks_in_anim >= YAWN_DURATION_TICKS) {
-        start_sleep();
+        enter_state(STATE_SLEEPING, &s_anim_sleep);
       }
       break;
     case STATE_SLEEPING:
@@ -171,7 +192,7 @@ static void anim_timer_cb(void *data) {
       break;
     case STATE_WAKING:
       if (s_ticks_in_anim >= WAKE_DURATION_TICKS) {
-        start_normal();
+        start_idle();
       }
       break;
   }
@@ -188,8 +209,9 @@ static void schedule_anim_timer(void) {
 // -------- Tap (wake from sleep) --------
 
 static void tap_handler(AccelAxisType axis, int32_t direction) {
-  if (s_state == STATE_SLEEPING || s_state == STATE_YAWNING) {
-    start_wake();
+  if (s_state == STATE_SLEEPING || s_state == STATE_YAWNING
+      || s_state == STATE_SCRATCHING) {
+    enter_state(STATE_WAKING, &s_anim_awake);
     update_bitmap();
   }
 }
@@ -290,7 +312,7 @@ static void window_load(Window *window) {
   layer_add_child(window_layer, text_layer_get_layer(s_date_layer));
 
   // Initial animation + clock state
-  start_normal();
+  start_idle();
   update_bitmap();
 
   time_t now = time(NULL);
