@@ -14,6 +14,6 @@ Install the [pebble sdk](https://developer.repebble.com/sdk/), then build and ru
 
 ## Other
 
-Mostly vibecoded using [the official claude skill for pebble](https://apps.repebble.com/4c25df439af543d19c98630a). 
+Mostly vibecoded using [the official claude skill for pebble](https://github.com/coredevices/pebble-watchface-agent-skill). 
 
 Neko sprites sourced from http://ftp.slackware.com/pub/slackware/slackware64-current/source/xap/xgames/xneko.tar.lz 
